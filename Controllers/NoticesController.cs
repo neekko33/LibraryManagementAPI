@@ -22,9 +22,24 @@ namespace LibraryManagementAPI.Controllers
 
         // GET: api/Notices
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Notice>>> GetNotices()
+        public async Task<ActionResult<Result<Notice>>> GetNotices([FromQuery] string search = "", [FromQuery] int page = 1, [FromQuery] int pageSize = 10)
         {
-            return await _context.Notices.ToListAsync();
+            IQueryable<Notice> query =  _context.Notices;
+            if (!string.IsNullOrEmpty(search))
+            {
+                search = search.ToLower();
+                query = query.Where(notice => notice.Title.ToLower().Contains(search));
+            }
+            int totalCount = await query.CountAsync();
+            int skipCount = (page - 1) * pageSize;
+
+            var notices = await query.Skip(skipCount).Take(pageSize).ToListAsync();
+
+            return new Result<Notice>
+            {
+                TotalCount = totalCount,
+                Data = notices
+            };
         }
 
         // GET: api/Notices/5

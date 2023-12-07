@@ -9,12 +9,6 @@ using LibraryManagementAPI.Models;
 
 namespace LibraryManagementAPI.Controllers
 {
-    public class BookResult
-    {
-        public List<Book> Books { get; set; }
-        public int TotalCount { get; set; }
-    }
-
     [Route("api/[controller]")]
     [ApiController]
     public class BooksController : ControllerBase
@@ -27,7 +21,7 @@ namespace LibraryManagementAPI.Controllers
         }
         // GET: api/Books
         [HttpGet]
-        public async Task<ActionResult<BookResult>> GetBooks([FromQuery] string search, [FromQuery] int categoryId = 0, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
+        public async Task<ActionResult<Result<Book>>> GetBooks([FromQuery] string search = "", [FromQuery] int categoryId = 0, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
         {
             IQueryable<Book> query = _context.Books;
 
@@ -48,9 +42,9 @@ namespace LibraryManagementAPI.Controllers
 
             var books = await query.Skip(skipCount).Take(pageSize).ToListAsync();
 
-            var result = new BookResult
+            var result = new Result<Book>
             {
-                Books = books,
+                Data = books,
                 TotalCount = totalRecords
             };
 

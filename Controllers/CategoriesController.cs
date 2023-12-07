@@ -22,9 +22,19 @@ namespace LibraryManagementAPI.Controllers
 
         // GET: api/Categories
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Category>>> GetCategories()
+        public async Task<ActionResult<Result<Category>>> GetCategories([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
         {
-            return await _context.Categories.ToListAsync();
+            int skipCount = (page - 1) * pageSize;
+
+            var query = _context.Categories;
+
+            var totalCount = await query.CountAsync();
+
+            var categories = await query.Skip(skipCount).Take(pageSize).ToListAsync();
+
+            var result = new Result<Category> {Data = categories, TotalCount = totalCount };
+
+            return result;
         }
 
         // GET: api/Categories/5
