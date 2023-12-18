@@ -6,9 +6,17 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using LibraryManagementAPI.Models;
+using System.ComponentModel;
+using System.Diagnostics;
 
 namespace LibraryManagementAPI.Controllers
 {
+    public class BorrowRequst
+    {
+        public int BookId { get; set; }
+        public int ReaderId { get; set; }
+    }
+
     [Route("api/[controller]")]
     [ApiController]
     public class BorrowsController : ControllerBase
@@ -22,27 +30,51 @@ namespace LibraryManagementAPI.Controllers
 
         // GET: api/Borrows
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Borrow>>> GetBorrows()
+        public async Task<ActionResult<Result<Borrow>>> GetBorrows([FromQuery] string search = "", [FromQuery] int pageSize=10, [FromQuery] int pageNumber=1)
         {
-            return await _context.Borrows.ToListAsync();
+            IQueryable<Borrow> query = _context.Borrows;
+
+            if (!string.IsNullOrEmpty(search))
+            {
+                search = search.ToLower();
+                query = query.Where(borrow => borrow.Reader.Name.ToLower().Contains(search) || borrow.Book.Title.ToLower().Contains(search));
+            }
+
+            var totalRecords = await query.CountAsync();
+
+            var skipCount = (pageNumber - 1) * pageSize;
+
+            var borrows = await query.Skip(skipCount).Take(pageSize).ToListAsync();
+
+            return new Result<Borrow>
+            {
+                Data = borrows,
+                TotalCount = totalRecords,
+            };
         }
 
         // GET: api/Borrows/5
-        [HttpGet("{id}")]
-        public async Task<ActionResult<Borrow>> GetBorrow(int id)
+        [HttpGet("{rid}")]
+        public async Task<ActionResult<Result<Borrow>>> GetBorrowsByReaderID(int rid, [FromQuery] int pageSize = 10, [FromQuery] int pageNumber = 1, [FromQuery] Boolean isHistory = false)
         {
-            var borrow = await _context.Borrows.FindAsync(id);
+            IQueryable<Borrow> query = _context.Borrows;
 
-            if (borrow == null)
+            query = isHistory ? query.Where(borrow => borrow.ReaderID == rid && borrow.ReturnDate != null) : query.Where(borrow => borrow.ReaderID == rid && borrow.ReturnDate == null); 
+            
+            var totalRecords = await query.CountAsync();
+
+            var skipCount = (pageNumber - 1) * pageSize;
+
+            var borrows = await query.Skip(skipCount).Take(pageSize).ToListAsync();
+
+            return new Result<Borrow>
             {
-                return NotFound();
-            }
-
-            return borrow;
+                Data = borrows,
+                TotalCount = totalRecords,
+            };
         }
 
         // PUT: api/Borrows/5
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPut("{id}")]
         public async Task<IActionResult> PutBorrow(int id, Borrow borrow)
         {
@@ -73,30 +105,75 @@ namespace LibraryManagementAPI.Controllers
         }
 
         // POST: api/Borrows
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPost]
-        public async Task<ActionResult<Borrow>> PostBorrow(Borrow borrow)
+        public async Task<ActionResult<Borrow>> PostBorrow([FromBody] BorrowRequst borrowRequest)
         {
+            var query = _context.Borrows;
+
+            var result = query.Where(borrow => borrow.ReaderID == borrowRequest.ReaderId && borrow.IsOverdue == true);
+
+            var isOverdue = result.Count() > 0;
+
+            if (isOverdue)
+            {
+                return Problem("当前账户存在逾期，请归还逾期图书后尝试");
+            }
+
+            var book = await _context.Books.FindAsync(borrowRequest.BookId);
+            if (book == null || book.AvailabilityStatus == "借出")
+            {
+                return Problem("该图书不存在或已借出，请重新操作");
+            }
+
+            var borrow = new Borrow
+            {
+                BookID = book.BookID,
+                ReaderID = borrowRequest.ReaderId,
+                IsOverdue = false,
+                BorrowDate = DateOnly.FromDateTime(DateTime.Now),
+                ReturnDate = null,
+                DueDate = DateOnly.FromDateTime(DateTime.Now.AddMonths(1)),
+            };
             _context.Borrows.Add(borrow);
             await _context.SaveChangesAsync();
 
-            return CreatedAtAction("GetBorrow", new { id = borrow.BorrowID }, borrow);
+            book.AvailabilityStatus = "借出";
+            await _context.SaveChangesAsync();
+
+            return Ok("借阅成功");
         }
 
         // DELETE: api/Borrows/5
         [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteBorrow(int id)
+        public async Task<IActionResult> DeleteBorrow([FromBody] BorrowRequst borrowRequest, int id)
         {
+            var query = _context.Borrows;
+
+            var result = query.Where(borrow => borrow.ReaderID == borrowRequest.ReaderId && borrow.IsOverdue == true);
+
+            var isOverdue = result.Count() > 0;
+
+            if (isOverdue)
+            {
+                return Problem("当前账户存在逾期，请归还逾期图书后尝试");
+            }
+            var book = await _context.Books.FindAsync(borrowRequest.BookId);
+            if (book == null || book.AvailabilityStatus == "在馆")
+            {
+                return Problem("该图书不存在或未借出，请重新操作");
+            }
             var borrow = await _context.Borrows.FindAsync(id);
             if (borrow == null)
             {
-                return NotFound();
+                return Problem("借阅信息不存在，请重新操作");
             }
-
-            _context.Borrows.Remove(borrow);
+            borrow.ReturnDate = DateOnly.FromDateTime(DateTime.Now);
             await _context.SaveChangesAsync();
 
-            return NoContent();
+            book.AvailabilityStatus = "在馆";
+            await _context.SaveChangesAsync();
+
+            return Ok("归还成功");
         }
 
         private bool BorrowExists(int id)

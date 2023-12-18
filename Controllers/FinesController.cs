@@ -41,48 +41,6 @@ namespace LibraryManagementAPI.Controllers
             return fine;
         }
 
-        // PUT: api/Fines/5
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PutFine(int id, Fine fine)
-        {
-            if (id != fine.FineID)
-            {
-                return BadRequest();
-            }
-
-            _context.Entry(fine).State = EntityState.Modified;
-
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!FineExists(id))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
-            }
-
-            return NoContent();
-        }
-
-        // POST: api/Fines
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
-        [HttpPost]
-        public async Task<ActionResult<Fine>> PostFine(Fine fine)
-        {
-            _context.Fines.Add(fine);
-            await _context.SaveChangesAsync();
-
-            return CreatedAtAction("GetFine", new { id = fine.FineID }, fine);
-        }
-
         // DELETE: api/Fines/5
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteFine(int id)
